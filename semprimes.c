@@ -3,13 +3,20 @@
 #include <unistd.h>
 #include <math.h>
 #include <sys/time.h>
-#include <pthread.h>
-#include <sempahores.h>
+#include <sys/wait.h>
+#include "semaphores.h"
+#include "linkedList.h"
 
-#define NTHREADS 4
+
+#define FINDERS 4
+#define DISPLAY 1
 
 int initial, final;
-int prime_count[ NTHREADS ];
+int prime_count = 0;
+//struct node* head = NULL;
+
+int mutex;
+int sem_display;
 
 int isprime(int n){
 	int d=3;
@@ -31,7 +38,7 @@ int isprime(int n){
 	return(prime);
 }
 
-void* tfunc(void* args){
+/*void* tfunc(void* args){
 	int i;
 	int threadNumber = *((int *) args);
 	prime_count[ threadNumber ] = 0;
@@ -45,47 +52,77 @@ void* tfunc(void* args){
         	prime_count[ threadNumber ]++;
         }
     }
+}*/
+
+void display(int primeNumber){
+	if(primeNumber){
+		push(primeNumber);
+	}
+	else{
+		insertionsort(head);
+		printlist(head);
+	}
+}
+
+void finder(int finderNumber){ 
+	int SIZE = final - initial;
+	int _initial = ( finderNumber * (SIZE / FINDERS)) + initial;
+	int _final = _initial + (SIZE / FINDERS);
+
+	for( int i = _initial; i < _final; i++){
+		if(isprime(i)){
+			semwait(mutex);
+			prime_count++;
+			display(i);
+			semsignal(mutex);
+
+		}
+	}
+
 }
 
 
-int main(){
+
+int
+int main(char *argv[]){
     long long start_ts;
 	long long stop_ts;
 	long long elapsed_time;
     struct timeval ts;
-	
-	pthread_t *tid;
-	int *args;
 
     int i;
 
-	tid = malloc(NTHREADS * sizeof(pthread_t));
-	args = malloc(NTHREADS * sizeof(int));
+	mutex = createsem(0x1111, 1);
+	sem_display = createsem(0x1112, 0);
 
-    printf("Enter initial value: \n");
-	scanf("%d", &initial);
-	printf("Enter final number: \n");
-	scanf("%d", &final);
+    initial = atoi(argv[1]);
+	final = atoi(argv[2]);
 
     gettimeofday(&ts, NULL);
 	start_ts = ts.tv_sec; // Tiempo inicial
 
-	for(i = 0; i < NTHREADS; i++){
-		args[i] = i;
-		pthread_create(&tid[i], NULL, tfunc, &args[i]);
+	for(int i = 0; i < FINDERS; i++){
+		if(fork() == 0){
+			finder(i);
+			exit(1);
+		}
 	}
-	
-	for(i = 0; i<NTHREADS; i++)
-		pthread_join(tid[i], NULL);
+
+	for(int i = 0; i < FINDERS; i++){
+		wait(NULL);
+	}
+
+	display(0);
+
+	erasesem(mutex);
+	erasesem(sem_display);
+
 
     gettimeofday(&ts, NULL);
 	stop_ts = ts.tv_sec; // Tiempo final
 	elapsed_time = stop_ts - start_ts;
 
-	int total = 0;
-	for(i = 0;i < NTHREADS; i++) {
-		total += prime_count[ i ];
-    }
+	int total = prime_count;
 
 	printf("%d\n", total);
 
