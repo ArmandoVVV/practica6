@@ -6,17 +6,51 @@
 #include <sys/wait.h>
 #include <sys/shm.h>
 #include "semaphores.h"
-#include "linkedList.h"
 
 #define FINDERS 4
 
 int initial, final;
-int* prime_count_number;
-
-//struct node* head = NULL;
+int* prime_number_end;
 
 int mutex;
 int sem_display;
+int sem_next;
+
+typedef struct node{
+    int data;
+    struct node *ptr;
+} node;
+
+node* head, *p_head;
+
+node* insert(node* head, int num) {
+    node *temp, *prev, *next;
+    temp = (node*)malloc(sizeof(node));
+    temp->data = num;
+    temp->ptr = NULL;
+    if(!head){
+        head=temp;
+    } else{
+        prev = NULL;
+        next = head;
+        while(next && next->data<=num){
+            prev = next;
+            next = next->ptr;
+        }
+        if(!next){
+            prev->ptr = temp;
+        } else{
+            if(prev) {
+                temp->ptr = prev->ptr;
+                prev-> ptr = temp;
+            } else {
+                temp->ptr = head;
+                head = temp;
+            }            
+        }   
+    }
+    return head;
+}
 
 int isprime(int n){
 	int d=3;
@@ -38,35 +72,23 @@ int isprime(int n){
 	return(prime);
 }
 
-/*void* tfunc(void* args){
-	int i;
-	int threadNumber = *((int *) args);
-	prime_count[ threadNumber ] = 0;
-
-	int SIZE = final - initial;
-	int _initial = ( threadNumber * ( SIZE / NTHREADS ) ) + initial;
-	int _final = _initial + ( SIZE / NTHREADS );
-	
-    for(i = _initial;i < _final; i++){
-    	if(isprime(i)){
-        	prime_count[ threadNumber ]++;
-        }
-    }
-}*/
-
-void display(int primeNumber){
+void display(){
 	//printf("%d\n", primeNumber);
-	prime_count_number[0] = primeNumber;
-	
-	if(prime_count_number[0]){
-		push(prime_count_number[0]);
-		printlist(head);
-		printf("\n");
+	while(prime_number_end[1] != FINDERS){
+		semwait(sem_display);
+		if(prime_number_end[1] != FINDERS){
+			int _primeNumber = prime_number_end[0];
+			head = insert(head, _primeNumber);
+		}
+		//printf("num primo: %d\n", prime_number_end[0]);
+		semsignal(sem_next);
 	}
-	else{
-		insertionsort(head);
-		printlist(head);
+	p_head = head;
+	while(p_head){
+		printf("%d\n", p_head->data);
+		p_head = p_head->ptr;
 	}
+	exit(0);
 }
 
 void finder(int finderNumber){ 
@@ -79,44 +101,52 @@ void finder(int finderNumber){
 	for( int i = _initial; i < _final; i++){
 		if(isprime(i)){
 			semwait(mutex);
-			prime_count_number[1]++;
+			prime_number_end[0] = i;
+			semsignal(sem_display);
 			//printf("%d\n", prime_count);
-	
-			display(i);
+			semwait(sem_next);
 			semsignal(mutex);
 
 		}
 	}
-
+	semwait(mutex);
+	prime_number_end[1]++;
+	semsignal(mutex);
+	exit(0);
 }
 
 int main(int argc, char *argv[]){
-    long long start_ts;
+    /*long long start_ts;
 	long long stop_ts;
 	long long elapsed_time;
-    struct timeval ts;
+    struct timeval ts;*/
 	int shmid;
 
     int i;
 
-
 	mutex = createsem(0x1200, 1);
-	sem_display = createsem(0x1201, 0);
+	sem_display = createsem(0x1225, 0);
+	sem_next = createsem(0x1250, 0);
 
     initial = atoi(argv[1]);
 	final = atoi(argv[2]);
 
-    gettimeofday(&ts, NULL);
-	start_ts = ts.tv_sec; // Tiempo inicial
+    /*gettimeofday(&ts, NULL);
+	start_ts = ts.tv_sec; // Tiempo inicial*/
 
-	shmid = shmget(0x1500, 2 * sizeof(int), IPC_CREAT | 0666);
+	shmid = shmget(0x1500, 2 * sizeof(int), IPC_CREAT | 0660);
 	if(shmid < 0){
 		fprintf(stderr, "Error al obtener memoria compartida\n");
 		exit(1);
 	}
-	prime_count_number = shmat(shmid, NULL, 0);
-	prime_count_number[1] = 0;
+	prime_number_end = shmat(shmid, NULL, 0);
+	prime_number_end[1] = 0;
 
+
+	if(fork() == 0){
+		display();
+		exit(1);
+	}
 
 	for(int i = 0; i < FINDERS; i++){
 		if(fork() == 0){
@@ -129,22 +159,15 @@ int main(int argc, char *argv[]){
 		wait(NULL);
 	}
 
-	
-
 	erasesem(mutex);
 	erasesem(sem_display);
 
-
-    gettimeofday(&ts, NULL);
+    /*gettimeofday(&ts, NULL);
 	stop_ts = ts.tv_sec; // Tiempo final
 	elapsed_time = stop_ts - start_ts;
-
-	int total = prime_count_number[1];
-
-	printf("%d\n", total);
-
+	
     printf("------------------------------\n");
-	printf("TIEMPO TOTAL, %lld segundos\n",elapsed_time);
+	printf("TIEMPO TOTAL, %lld segundos\n",elapsed_time);*/
 
     return 0;
 }
