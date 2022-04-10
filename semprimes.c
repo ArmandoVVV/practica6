@@ -23,7 +23,7 @@ typedef struct node{
 
 node* head, *p_head;
 
-node* insert(node* head, int num) {
+node* push(node* head, int num) {
     node *temp, *prev, *next;
     temp = (node*)malloc(sizeof(node));
     temp->data = num;
@@ -78,7 +78,7 @@ void display(){
 		semwait(sem_display);
 		if(prime_number_end[1] != FINDERS){
 			int _primeNumber = prime_number_end[0];
-			head = insert(head, _primeNumber);
+			head = push(head, _primeNumber);
 		}
 		//printf("num primo: %d\n", prime_number_end[0]);
 		semsignal(sem_next);
@@ -141,7 +141,6 @@ int main(int argc, char *argv[]){
 	}
 	prime_number_end = shmat(shmid, NULL, 0);
 	prime_number_end[1] = 0;
-
 
 	if(fork() == 0){
 		display();
